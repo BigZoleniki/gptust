@@ -30,11 +30,11 @@ async fn main() {
     let mut score = 0;
 
     // Game state reset function
-    let mut reset_game = || {
+    let reset_game = |player_texture: &Texture2D, enemy_texture: &Texture2D| {
         let player = Player {
             pos: vec2(screen_width() / 2.0, screen_height() / 2.0),
             speed: 200.0,
-            texture: player_texture,
+            texture: player_texture.clone(),
             health: 5,
             dead: false,
         };
@@ -60,7 +60,7 @@ async fn main() {
         (player, bullets, enemies)
     };
 
-    let (mut player, mut bullets, mut enemies) = reset_game();
+    let (mut player, mut bullets, mut enemies) = reset_game(&player_texture, &enemy_texture);
     let mut player_last_shot_time = 0.0;
     let player_size = 32.0;
     let bullet_size = 6.0;
@@ -69,9 +69,8 @@ async fn main() {
         clear_background(DARKGRAY);
         let dt = get_frame_time();
 
-        // Restart on 'R' if dead
         if player.dead && is_key_pressed(KeyCode::R) {
-            let (p, b, e) = reset_game();
+            let (p, b, e) = reset_game(&player_texture, &enemy_texture);
             player = p;
             bullets = b;
             enemies = e;
@@ -83,11 +82,14 @@ async fn main() {
         let mouse_pos = vec2(mouse_position().0, mouse_position().1);
         let aim_dir = {
             let d = mouse_pos - player.pos;
-            if d.length_squared() > 0.0 { d.normalize() } else { vec2(1.0, 0.0) }
+            if d.length_squared() > 0.0 {
+                d.normalize()
+            } else {
+                vec2(1.0, 0.0)
+            }
         };
         let angle = aim_dir.y.atan2(aim_dir.x);
 
-        // Player input if alive
         if !player.dead {
             let mut dir = vec2(0.0, 0.0);
             if is_key_down(KeyCode::W) {
@@ -136,12 +138,14 @@ async fn main() {
             }
             enemy.last_shot_time -= dt;
 
+            let enemy_angle = to_player.y.atan2(to_player.x);
             draw_texture_ex(
                 &enemy.texture,
                 enemy.pos.x,
                 enemy.pos.y,
                 WHITE,
                 DrawTextureParams {
+                    rotation: enemy_angle,
                     dest_size: Some(vec2(player_size, player_size)),
                     ..Default::default()
                 },
@@ -152,10 +156,7 @@ async fn main() {
             draw_rectangle(enemy.pos.x, enemy.pos.y - 8.0, player_size * hp_percent, 5.0, RED);
         }
 
-        // Count enemy deaths
-        let prev_enemy_count = enemies.len();
         enemies.retain(|e| e.health > 0);
-        score += prev_enemy_count - enemies.len();
 
         // Spawn new enemies
         if enemies.len() <= 3 {
@@ -192,6 +193,9 @@ async fn main() {
                 for enemy in &mut enemies {
                     if (enemy.pos - b.pos).length() < player_size / 2.0 {
                         enemy.health -= 1;
+                        if enemy.health <= 0 {
+                            score += 1;
+                        }
                         return false;
                     }
                 }
@@ -225,10 +229,8 @@ async fn main() {
         draw_rectangle(player.pos.x, player.pos.y - 8.0, player_size, 5.0, GRAY);
         draw_rectangle(player.pos.x, player.pos.y - 8.0, player_size * hp, 5.0, GREEN);
 
-        // Score display
         draw_text(&format!("Score: {}", score), 10.0, 20.0, 30.0, WHITE);
 
-        // Game over UI
         if player.dead {
             draw_text("YOU DIED", screen_width() / 2.0 - 80.0, screen_height() / 2.0, 40.0, RED);
             draw_text(
